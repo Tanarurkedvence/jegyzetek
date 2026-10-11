@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jegyzet kereső</title>
+    <style>
+        :root {
+            --bg: #f6f4f1;
+            --panel: #ffffff;
+            --text: #1f1b18;
+            --muted: #6b625b;
+            --border: #e2dcd5;
+            --accent: #b0703c;
+            --accent-soft: #f3e4d6;
+            --code-bg: #1e1e1e;
+            --code-text: #e6e6e6;
+            --mark: #ffe08a;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #161412;
+                --panel: #201d1a;
+                --text: #ece6df;
+                --muted: #a39a91;
+                --border: #36302b;
+                --accent: #e0a066;
+                --accent-soft: #3a2c20;
+                --code-bg: #0f0f0f;
+                --mark: #8a6a12;
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.55;
+        }
+
+        .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+
+        header.top {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 0 12px;
+        }
+
+        h1.logo { font-size: 1.15rem; margin-bottom: 10px; }
+        h1.logo span { color: var(--accent); }
+
+        .searchbox { display: flex; gap: 8px; }
+
+        #q {
+            flex: 1;
+            font-size: 1.1rem;
+            padding: 12px 14px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            background: var(--panel);
+            color: var(--text);
+            outline: none;
+        }
+
+        #q:focus { border-color: var(--accent); }
+
+        .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+        .filters button {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+            padding: 4px 12px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .filters button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+        .status { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+
+        .tips { margin: 18px 0; color: var(--muted); font-size: 0.95rem; }
+        .tips .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .tips .chips button {
+            border: 1px dashed var(--accent);
+            background: transparent;
+            color: var(--text);
+            padding: 4px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        #results { padding: 16px 0 60px; display: grid; gap: 14px; }
+
+        .hit {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .hit-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+        }
+
+        .badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .hit-title { font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .hit-title small { color: var(--muted); font-weight: 400; }
+        .hit-head a { color: var(--muted); font-size: 0.8rem; text-decoration: none; white-space: nowrap; }
+        .hit-head a:hover { color: var(--accent); }
+
+        .hit-body { padding: 4px 14px 14px; max-height: 420px; overflow: hidden; position: relative; }
+        .hit.open .hit-body { max-height: none; }
+        .hit:not(.open) .hit-body::after {
+            content: "";
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            height: 70px;
+            background: linear-gradient(transparent, var(--panel));
+        }
+
+        .more {
+            display: block;
+            width: 100%;
+            border: none;
+            border-top: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--accent);
+            padding: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .hit.open .more { display: none; }
+
+        /* renderelt markdown */
+        .md h2, .md h3, .md h4 { margin: 14px 0 6px; font-size: 1.05rem; }
+        .md p { margin: 8px 0; }
+        .md ul, .md ol { margin: 8px 0 8px 22px; }
+        .md blockquote { border-left: 3px solid var(--accent); padding-left: 10px; color: var(--muted); margin: 8px 0; }
+        .md a { color: var(--accent); }
+        .md img { display: block; max-width: 100%; margin: 8px 0; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+        .md table { border-collapse: collapse; margin: 10px 0; font-size: 0.9rem; display: block; overflow-x: auto; }
+        .md th, .md td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; vertical-align: top; }
+        .md th { background: var(--accent-soft); }
+        .md :not(pre) > code {
+            background: var(--accent-soft);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 0.88em;
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        .codewrap { position: relative; margin: 10px 0; }
+
+        pre {
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 12px 14px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 0.85rem;
+            line-height: 1.45;
+        }
+
+        .copy {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            border: 1px solid #555;
+            background: #2d2d2d;
+            color: #ddd;
+            border-radius: 6px;
+            padding: 2px 10px;
+            font-size: 0.78rem;
+            cursor: pointer;
+        }
+
+        .copy.ok { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+
+        mark { background: var(--mark); color: inherit; border-radius: 2px; }
+        pre mark { background: #8a6a12; color: #fff; }
+
+        .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+        kbd {
+            border: 1px solid var(--border);
+            border-bottom-width: 2px;
+            border-radius: 4px;
+            padding: 0 5px;
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 600px) {
+            .hit-head { flex-wrap: wrap; }
+            #q { font-size: 1rem; }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="top">
+        <div class="wrap">
+            <h1 class="logo">Jegyzet <span>kereső</span></h1>
+            <div class="searchbox">
+                <input id="q" type="search" autocomplete="off"
+                    placeholder="Mit keresel? pl. hamburger menü, PDO insert, streamreader, listbox, messagebox">
+            </div>
+            <div class="filters" id="filters"></div>
+            <div class="status" id="status">Betöltés…</div>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <div class="tips" id="tips">
+            Írj be pár szót magyarul vagy angolul – ékezet és kis/nagybetű nem számít.
+            Gyorsbillentyű: <kbd>/</kbd> a keresőbe ugrik, <kbd>Esc</kbd> törli.
+            <div class="chips" id="chips"></div>
+        </div>
+        <div id="results"></div>
+    </main>
+
+    <script>
+        // ===================== FORRÁSOK =====================
+        const GH = "https://github.com/";
+        const RAW = "https://raw.githubusercontent.com/";
+        const OWNER = "Tanarurkedvence/";
+
+        // jegyzetek (ugyanebből a repóból)
+        const NOTES = [
+            { file: "Webdizajn-lepesrol-lepesre.md", group: "CSS" },
+            { file: "HTML.md", group: "HTML" },
+            { file: "CSS.md", group: "CSS" },
+            { file: "JavaScript.md", group: "JS" },
+            { file: "PHP.md", group: "PHP" },
+            { file: "PHP-lepesrol-lepesre.md", group: "PHP" },
+            { file: "CLI.md", group: "C#" },
+            { file: "GUI.md", group: "C#" },
+            { file: "GUI-Toolbox.md", group: "C#" },
+            { file: "LINQ.md", group: "C#" },
+            { file: "API-kiegeszites.md", group: "C#" },
+            // Juhász Zoltán ASP.NET Web API tutorialja – a saját forkból (1:1 az eredetivel)
+            { file: "https://raw.githubusercontent.com/Tanarurkedvence/ASP26032502/master/README.md", link: "https://github.com/Tanarurkedvence/ASP26032502#readme", group: "C#", prefix: "ASP tutorial" }
+        ];
+
+        // megoldások kódja (más repókból)
+        const CODE = [
+            ["webmegoldas", "index.html", "Web"], ["webmegoldas", "style.css", "Web"], ["webmegoldas", "script.js", "Web"],
+            ["babszem_webshop", "backend/config.php", "PHP"], ["babszem_webshop", "backend/kategoriak.php", "PHP"],
+            ["babszem_webshop", "backend/termekek.php", "PHP"], ["babszem_webshop", "frontend/js/script.js", "JS"],
+            ["AutoKonzol", "Program.cs", "C#"], ["AutoKonzol", "Auto.cs", "C#"],
+            ["AutoGUI", "Form1.cs", "C#"], ["AutoGUI", "Auto.cs", "C#"],
+            ["DrinkCLI1", "Program.cs", "C#"], ["DrinkCLI1", "Citizen.cs", "C#"],
+            ["EremtablaGUI", "Form1.cs", "C#"], ["EremtablaGUI", "Orszag.cs", "C#"],
+            ["FesztivalGUI", "Form1.cs", "C#"], ["FesztivalGUI", "Fesztival.cs", "C#"],
+            ["FilmCLI", "Program.cs", "C#"], ["FilmCLI", "Movie.cs", "C#"],
+            ["FutoversenyCLI", "Program.cs", "C#"], ["FutoversenyCLI", "Runner.cs", "C#"],
+            ["HasznaltautoCLI", "Program.cs", "C#"], ["HasznaltautoCLI", "Car.cs", "C#"],
+            ["KonyvtarCLI", "Program.cs", "C#"], ["KonyvtarCLI", "Kolcsonzes.cs", "C#"],
+            ["LaptopsCLI", "Program.cs", "C#"], ["LaptopsCLI", "Laptop.cs", "C#"],
+            ["LaptopsGUI", "Form1.cs", "C#"], ["LaptopsGUI", "Laptop.cs", "C#"],
+            ["MenhelyCLI", "Program.cs", "C#"], ["MenhelyCLI", "Kutya.cs", "C#"],
+            ["MenhelyGUI", "Form1.cs", "C#"], ["MenhelyGUI", "Kutya.cs", "C#"],
+            ["ParalimpiaGUI", "Form1.cs", "C#"], ["ParalimpiaGUI", "Paralimpia.cs", "C#"],
+            ["PizzaGUI", "Form1.cs", "C#"], ["PizzaGUI", "Pizza.cs", "C#"],
+            ["Smokecli1", "Program.cs", "C#"], ["Smokecli1", "Resident.cs", "C#"],
+            ["VarakGUI", "Form1.cs", "C#"], ["VarakGUI", "Var.cs", "C#"],
+            ["LinqPeldak", "Program.cs", "C#"],
+            // Web API: Juhász Zoltán tutorialja (a saját fork, master ág)
+            ["ASP26032502", "Program.cs", "C#", "master"],
+            ["ASP26032502", "Controllers/Api/AnimalsController.cs", "C#", "master"],
+            ["ASP26032502", "Data/ApplicationDbContext.cs", "C#", "master"],
+            ["ASP26032502", "Models/Animal.cs", "C#", "master"],
+            ["ASP26032502", "Models/Department.cs", "C#", "master"],
+            ["ASP26032502", "Models/Zookeeper.cs", "C#", "master"],
+            ["ASP26032502", "appsettings.json", "C#", "master"],
+            ["ASP26032502", "Properties/launchSettings.json", "C#", "master"],
+            ["ASP26032502", "ASP26032502.csproj", "C#", "master"]
+        ];
+
+        // ===================== SZINONIMÁK =====================
+        // kulcs: magyar (ékezet nélkül, szótő), érték: ezekre is keres
+        const SYN = {
+            kozep: ["center", "justify-content", "align-items", "margin: 0 auto"],
+            lekerekit: ["border-radius"], kerek: ["border-radius", "round"],
+            arnyek: ["box-shadow", "shadow"],
+            atmenet: ["gradient", "transition"], szinatmenet: ["gradient"], halvanyul: ["gradient"],
+            hatterkep: ["background-image", "background-size"], hatter: ["background"],
+            oszlop: ["grid-template-columns", "column"], racs: ["grid"],
+            egymas: ["flex-direction", "column", "1fr"], mobil: ["media", "max-width", "600px"],
+            telefon: ["media", "max-width"], reszponziv: ["media", "max-width", "viewport"],
+            tablet: ["media", "1000px"], hamburger: ["hamburger", "toggle", "active"],
+            menu: ["nav", "navbar", "menu"], eger: ["hover"], emelked: ["hover", "translatey"],
+            felette: ["hover"], mozgat: ["transform", "translate"], animac: ["keyframes", "animation"],
+            betutipus: ["font-family"], betumeret: ["font-size"], betu: ["font"], felkover: ["font-weight", "bold"],
+            szin: ["color"], kep: ["img", "object-fit", "image"], kitolt: ["object-fit", "cover"],
+            rejt: ["display: none", "hidden"], eltun: ["display: none", "hidden"], megjelen: ["display", "block"],
+            gomb: ["button"], valtoz: ["var(", ":root", "let", "const"], keret: ["border"],
+            tavolsag: ["margin", "padding", "gap"], belso: ["padding"], kulso: ["margin"],
+            lablec: ["footer"], fejlec: ["header"], fooldal: ["main"], szakasz: ["section"],
+            tomb: ["array", "filter", "map", "list"], lista: ["list", "ul", "li", "array", "foreach"],
+            szur: ["filter", "where"], rendez: ["sort", "orderby", "order by"], keres: ["includes", "search", "like", "contains"],
+            osszeg: ["sum", "reduce"], atlag: ["average", "avg"], darab: ["count", "length"], szamol: ["count"],
+            legnagyobb: ["max"], legkisebb: ["min"], legdragabb: ["max", "orderbydescending"], csoport: ["groupby", "group by"],
+            fajl: ["streamreader", "streamwriter", "file", "forras"], beolvas: ["streamreader", "readline", "split"],
+            fajlbair: ["streamwriter", "writeline"], kiir: ["console.writeline", "writeline", "echo", "tostring"],
+            darabol: ["split"], feloszt: ["split"], konstruktor: ["constructor", "public "], osztaly: ["class"],
+            kapcsolat: ["pdo", "config", "connection"], adatbazis: ["pdo", "mysql", "dbcontext", "sql"],
+            lekerdez: ["select", "query", "prepare"], beszur: ["insert", "post"], uj: ["insert", "post", "createelement", "new"],
+            modosit: ["update", "patch", "put"], frissit: ["update", "patch"], torol: ["delete", "remove"],
+            hiba: ["error", "catch", "exception", "404", "400"], nemtalal: ["404", "notfound"],
+            urlap: ["form", "input", "submit"], tablazat: ["table", "datagridview"], kattint: ["click", "addeventlistener"],
+            esemeny: ["addeventlistener", "event", "click"], valaszt: ["select", "selectedindex", "combobox", "listbox"],
+            keszlet: ["stock"], termek: ["product"], kategoria: ["category", "categories"], ar: ["price"],
+            tranzakc: ["begintransaction", "commit", "rollback"], biztonsag: ["prepare", "htmlspecialchars"],
+            cim: ["h1", "h2", "title"], link: ["href", "<a "], bekot: ["link rel", "script src", "require_once"],
+            uzenet: ["messagebox", "alert", "message"], ablak: ["form", "messagebox"], kilep: ["application.exit", "close"],
+            radio: ["radiobutton", "radio"], jelolo: ["checkbox"], legordulo: ["combobox", "select"],
+            szoveg: ["text", "string", "textbox"], szam: ["int", "number", "parse"], kerekit: ["math.round", "round"],
+            datum: ["date", "datetime"], ellenoriz: ["validate", "is_int", "if ("], kotelezo: ["required"],
+            kuld: ["fetch", "post", "submit"], lekeres: ["fetch", "get"], valasz: ["response", "json"]
+        };
+
+        const STOP = new Set(("a az es egy hogy hogyan mit mi mire kell legyen lehet tudok akarok van nincs meg be ki " +
+            "ra re ba be ban ben nal nel val vel csinal csinalj csinaljak csinalni ird irj irjak irni kod kodot " +
+            "kodja valami milyen melyik hol mikor ezt azt ilyen olyan ami amit amely pedig vagy is nem the of to " +
+            "in and for with how do i what keszit keszits keszitsek").split(" "));
+
+        // ===================== SEGÉDFÜGGVÉNYEK =====================
+        const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const sections = [];
+
+        function langOf(path) {
+            const ext = path.split(".").pop();
+            return { cs: "csharp", js: "js", php: "php", css: "css", html: "html" }[ext] || "";
+        }
+
+        // ===================== MARKDOWN → HTML (egyszerű) =====================
+        function inline(s) {
+            s = esc(s);
+            const codes = [];
+            s = s.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+            s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+            s = s.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+            s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m, alt, src) => `<img src="${src}" alt="${alt}" loading="lazy">`);
+            s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, t, u) => {
+                if (u.startsWith("#")) return t;
+                if (/^[A-Za-z]+\.md/.test(u)) u = "#" + encodeURIComponent(t);
+                return `<a href="${u}" target="_blank">${t}</a>`;
+            });
+            return s.replace(/\u0000(\d+)\u0000/g, (m, i) => `<code>${codes[i]}</code>`);
+        }
+
+        function md(text) {
+            const lines = text.split("\n");
+            let html = "", i = 0;
+            while (i < lines.length) {
+                const l = lines[i];
+                if (l.startsWith("```")) {
+                    const buf = [];
+                    i++;
+                    while (i < lines.length && !lines[i].startsWith("```")) buf.push(lines[i++]);
+                    i++;
+                    html += codeBlock(buf.join("\n"));
+                    continue;
+                }
+                const h = l.match(/^(#{2,4})\s+(.*)/);
+                if (h) { html += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`; i++; continue; }
+                if (l.startsWith("|")) {
+                    const rows = [];
+                    while (i < lines.length && lines[i].startsWith("|")) rows.push(lines[i++]);
+                    const cells = r => r.replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map(c => inline(c.trim()));
+                    let t = "<table><tr>" + cells(rows[0]).map(c => `<th>${c}</th>`).join("") + "</tr>";
+                    rows.slice(2).forEach(r => t += "<tr>" + cells(r).map(c => `<td>${c}</td>`).join("") + "</tr>");
+                    html += t + "</table>";
+                    continue;
+                }
+                if (/^\s*([-*]|\d+\.)\s/.test(l)) {
+                    const ordered = /^\s*\d+\./.test(l);
+                    let t = ordered ? "<ol>" : "<ul>";
+                    while (i < lines.length && /^\s*([-*]|\d+\.)\s/.test(lines[i])) {
+                        t += "<li>" + inline(lines[i].replace(/^\s*([-*]|\d+\.)\s+(\[[ x]\]\s*)?/, "")) + "</li>";
+                        i++;
+                    }
+                    html += t + (ordered ? "</ol>" : "</ul>");
+                    continue;
+                }
+                if (l.startsWith(">")) {
+                    const buf = [];
+                    while (i < lines.length && lines[i].startsWith(">")) buf.push(lines[i++].replace(/^>\s?/, ""));
+                    html += `<blockquote>${inline(buf.join(" "))}</blockquote>`;
+                    continue;
+                }
+                if (l.trim() === "" || l.trim() === "---") { i++; continue; }
+                const buf = [];
+                while (i < lines.length && lines[i].trim() !== "" && !/^(```|#|\||>|\s*([-*]|\d+\.)\s)/.test(lines[i])) buf.push(lines[i++]);
+                if (buf.length === 0) { i++; continue; }
+                html += `<p>${inline(buf.join(" "))}</p>`;
+            }
+            return html;
+        }
+
+        function codeBlock(code) {
+            return `<div class="codewrap"><button class="copy">Másolás</button><pre><code>${esc(code)}</code></pre></div>`;
+        }
+
+        // ===================== BETÖLTÉS =====================
+        function addNoteSections(text, note) {
+            const lines = text.split("\n");
+            let current = null, h2 = "";
+            const push = () => {
+                if (current && current.body.trim() && !/^tartalom$/i.test(current.title)) sections.push(current);
+            };
+            for (const line of lines) {
+                const m = line.match(/^(#{2,3})\s+(.*)/);
+                if (m) {
+                    push();
+                    const title = m[2].replace(/^\d+\.\s*/, "");
+                    if (m[1] === "##") h2 = title;
+                    current = {
+                        group: note.group,
+                        title: (note.prefix ? note.prefix + " › " : "") + (m[1] === "##" ? title : `${h2} › ${title}`),
+                        source: note.link || note.file,
+                        url: note.link || note.file,
+                        body: "",
+                        kind: "md"
+                    };
+                } else if (current) {
+                    current.body += line + "\n";
+                }
+            }
+            push();
+        }
+
+        async function load() {
+            const status = document.getElementById("status");
+            let done = 0, failed = 0;
+            const total = NOTES.length + CODE.length;
+            const tick = () => status.textContent = `Betöltve: ${done}/${total} forrás` + (failed ? ` (${failed} nem érhető el)` : "");
+
+            const noteJobs = NOTES.map(async n => {
+                try {
+                    const r = await fetch(n.file);
+                    if (!r.ok) throw 0;
+                    addNoteSections(await r.text(), n);
+                } catch (e) { failed++; }
+                done++; tick();
+            });
+
+            const codeJobs = CODE.map(async ([repo, path, group, branch = "main"]) => {
+                const full = repo.includes("/") ? repo : OWNER + repo;   // más tulajdonos repója is lehet
+                try {
+                    const r = await fetch(`${RAW}${full}/${branch}/${path}`);
+                    if (!r.ok) throw 0;
+                    const text = (await r.text()).replace(/^﻿/, "");
+                    sections.push({
+                        group: "Megoldás",
+                        lang: group,
+                        title: `${repo} / ${path}`,
+                        source: repo,
+                        url: `${GH}${full}/blob/${branch}/${path}`,
+                        body: text,
+                        kind: "code"
+                    });
+                } catch (e) { failed++; }
+                done++; tick();
+            });
+
+            await Promise.all([...noteJobs, ...codeJobs]);
+            sections.forEach(s => {
+                s.ntitle = norm(s.title);
+                s.nbody = norm(s.body);
+            });
+            tick();
+            if (location.protocol === "file:" && failed) {
+                status.textContent += " – fájlként megnyitva nem megy, nyisd meg a GitHub Pages címen!";
+            }
+            const fromHash = decodeURIComponent(location.hash.slice(1));
+            if (fromHash) document.getElementById("q").value = fromHash;
+            search();
+        }
+
+        // ===================== KERESÉS =====================
+        let filter = "Mind";
+
+        function terms(query) {
+            const words = norm(query).split(/[^a-z0-9#_.:()$-]+/).filter(w => w.length > 1 && !STOP.has(w));
+            const out = [];
+            for (const w of words) {
+                const t = { word: w, alts: [] };
+                // magyar toldalékok levágása (gombot → gomb, kepet → kep)
+                for (let cut = 1; cut <= 3 && w.length - cut >= 4; cut++) t.alts.push(w.slice(0, w.length - cut));
+                // szinonimák
+                for (const key in SYN) {
+                    // rövid kulcs (pl. "ar") csak pontos egyezésre, hogy az "arnyek" ne találja meg
+                    const hit = key.length < 4 ? w === key : w.startsWith(key) || (key.startsWith(w) && w.length >= 4);
+                    if (hit) t.alts.push(...SYN[key].map(norm));
+                }
+                out.push(t);
+            }
+            return out;
+        }
+
+        function count(hay, needle) {
+            if (!needle) return 0;
+            let n = 0, i = hay.indexOf(needle);
+            while (i !== -1 && n < 20) { n++; i = hay.indexOf(needle, i + needle.length); }
+            return n;
+        }
+
+        function score(s, ts) {
+            let total = 0, matched = 0;
+            for (const t of ts) {
+                // a pontosan beírt szó sokat ér, a szinonima / levágott toldalék kevesebbet
+                let best = count(s.ntitle, t.word) * 25 + count(s.nbody, t.word) * 3;
+                let alt = 0;
+                for (const a of t.alts) {
+                    alt = Math.max(alt, count(s.ntitle, a) * 6 + count(s.nbody, a));
+                }
+                best = Math.max(best, alt * 0.5);
+                if (best > 0) matched++;
+                total += Math.min(best, 60);
+            }
+            if (matched === 0) return 0;
+            // aki minden szót tartalmaz, előrébb kerül
+            total *= matched === ts.length ? 3 : matched / ts.length;
+            if (s.kind === "md") total *= 1.3; // a jegyzet általában jobb magyarázat
+            return total;
+        }
+
+        function search() {
+            const q = document.getElementById("q").value.trim();
+            const box = document.getElementById("results");
+            document.getElementById("tips").style.display = q ? "none" : "block";
+            history.replaceState(null, "", q ? "#" + encodeURIComponent(q) : location.pathname);
+
+            const pool = sections.filter(s => filter === "Mind" || s.group === filter || (filter === "C#" && s.lang === "C#"));
+            if (!q) { box.innerHTML = ""; return; }
+
+            const ts = terms(q);
+            if (ts.length === 0) { box.innerHTML = `<p class="empty">Írj be egy konkrétabb szót.</p>`; return; }
+
+            const hits = pool.map(s => ({ s, sc: score(s, ts) })).filter(h => h.sc > 0)
+                .sort((a, b) => b.sc - a.sc).slice(0, 25);
+
+            if (hits.length === 0) {
+                box.innerHTML = `<p class="empty">Nincs találat erre: „${esc(q)}”. Próbáld angolul (pl. border-radius, fetch, insert) vagy kevesebb szóval.</p>`;
+                return;
+            }
+
+            const marks = [...new Set(ts.flatMap(t => [t.word, ...t.alts]).filter(x => x.length >= 3))];
+            box.innerHTML = "";
+            hits.forEach(({ s }, idx) => {
+                const el = document.createElement("article");
+                el.className = "hit" + (idx < 3 ? " open" : "");
+                const badge = s.kind === "code" ? s.lang : s.group;
+                el.innerHTML = `
+                    <div class="hit-head">
+                        <span class="badge">${esc(badge)}</span>
+                        <span class="hit-title">${esc(s.title)} ${s.kind === "code" ? "<small>(megoldás kódja)</small>" : ""}</span>
+                        <a href="${s.url}" target="_blank">megnyitás ↗</a>
+                    </div>
+                    <div class="hit-body md">${s.kind === "code" ? codeBlock(s.body) : md(s.body)}</div>
+                    <button class="more">Teljes rész mutatása ▾</button>`;
+                el.querySelector(".hit-head").addEventListener("click", e => {
+                    if (e.target.tagName !== "A") el.classList.toggle("open");
+                });
+                el.querySelector(".more").addEventListener("click", () => el.classList.add("open"));
+                highlight(el.querySelector(".hit-body"), marks);
+                box.appendChild(el);
+            });
+        }
+
+        // találatok kiemelése (ékezetfüggetlenül)
+        function highlight(root, words) {
+            if (words.length === 0) return;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            for (const node of nodes) {
+                const text = node.nodeValue, ntext = norm(text);
+                const ranges = [];
+                for (const w of words) {
+                    let i = ntext.indexOf(w);
+                    while (i !== -1) { ranges.push([i, i + w.length]); i = ntext.indexOf(w, i + w.length); }
+                }
+                if (ranges.length === 0) continue;
+                ranges.sort((a, b) => a[0] - b[0]);
+                const merged = [];
+                for (const r of ranges) {
+                    const last = merged[merged.length - 1];
+                    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]); else merged.push([...r]);
+                }
+                const frag = document.createDocumentFragment();
+                let pos = 0;
+                for (const [a, b] of merged) {
+                    frag.append(text.slice(pos, a));
+                    const m = document.createElement("mark");
+                    m.textContent = text.slice(a, b);
+                    frag.append(m);
+                    pos = b;
+                }
+                frag.append(text.slice(pos));
+                node.replaceWith(frag);
+            }
+        }
+
+        // ===================== UI =====================
+        const FILTERS = ["Mind", "HTML", "CSS", "JS", "PHP", "C#", "Megoldás"];
+        const filterBox = document.getElementById("filters");
+        FILTERS.forEach(f => {
+            const b = document.createElement("button");
+            b.textContent = f;
+            if (f === filter) b.className = "on";
+            b.addEventListener("click", () => {
+                filter = f;
+                filterBox.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+                search();
+            });
+            filterBox.appendChild(b);
+        });
+
+        const EXAMPLES = ["hamburger menü", "kártya hover emelkedik", "hero gradient háttérkép", "grid 3 oszlop",
+            "media query mobil", "fetch post", "PDO prepared statement", "left join csoportosítás",
+            "streamreader beolvasás split", "fájlba írás", "legnagyobb ár linq", "messagebox kilépés",
+            "listbox selectedindex", "404 nem található"];
+        const chips = document.getElementById("chips");
+        EXAMPLES.forEach(ex => {
+            const b = document.createElement("button");
+            b.textContent = ex;
+            b.addEventListener("click", () => { q.value = ex; search(); q.focus(); });
+            chips.appendChild(b);
+        });
+
+        const q = document.getElementById("q");
+        let timer;
+        q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 120); });
+
+        document.addEventListener("keydown", e => {
+            if (e.key === "/" && document.activeElement !== q) { e.preventDefault(); q.focus(); q.select(); }
+            if (e.key === "Escape") { q.value = ""; search(); q.focus(); }
+        });
+
+        // másolás gomb
+        document.addEventListener("click", async e => {
+            if (!e.target.classList.contains("copy")) return;
+            const code = e.target.parentElement.querySelector("code").textContent;
+            try {
+                await navigator.clipboard.writeText(code);
+            } catch {
+                const t = document.createElement("textarea");
+                t.value = code; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+            }
+            e.target.textContent = "Másolva ✓";
+            e.target.classList.add("ok");
+            setTimeout(() => { e.target.textContent = "Másolás"; e.target.classList.remove("ok"); }, 1500);
+        });
+
+        window.addEventListener("hashchange", () => {
+            const h = decodeURIComponent(location.hash.slice(1));
+            if (h && h !== q.value) { q.value = h; search(); }
+        });
+
+        load();
+    </script>
+</body>
+
+</html>
