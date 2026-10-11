@@ -2,6 +2,8 @@
 
 Összefoglalók és kidolgozott példák – C# és webfejlesztés.
 
+## 🖼️ [WinForms vezérlők képekkel – mind egy helyen](gui-kepek/README.md)
+
 ## 🔎 [KERESŐ – kérdezz bármit](https://tanarurkedvence.github.io/jegyzetek/)
 
 Beírod, mit keresel (pl. *hamburger menü*, *PDO insert*, *streamreader split*), és kidobja a jegyzetek hozzá tartozó részét **és** a megoldásaid működő kódját, másolás gombbal.
